@@ -2,14 +2,14 @@ import requests
 import unicodecsv as csv
 from bs4 import BeautifulSoup
 import re
+from itertools import chain
 
 temp = []
-results_holder = []
-final_result = []
+results = []
 
 def scrape_data(major,page_num):
 	global temp
-	global results_holder
+	global results
 
 	feed_url = "http://thegradcafe.com/survey/index.php?q="+major+"&t=a&o=&p="+str(page_num)
 
@@ -20,14 +20,14 @@ def scrape_data(major,page_num):
 	page_source = r.text
 	soup = BeautifulSoup(page_source,"html.parser")
 
-	# Look for the results in page source and write to results_holder
+	# Look for the results in page source and write to results
 	for i in soup.find_all("tr",["row0","row1"]):
 		for j in i:
 			temp.append(j.get_text())
-		if len(results_holder)==11:
-			results_holder.append(temp[5:-1])
+		if len(results)==11:
+			results.append(temp[5:-1])
 		else:
-			results_holder.append(temp[:-1])
+			results.append(temp[:-1])
 		temp = []
 
 def isPhD(string):
@@ -41,32 +41,38 @@ def isPhD(string):
 	# If you simply write else: pass, isPhD will return None
 
 def resultAndGpa(string):
-	if "GPA" in string:
-		return string.split(" ")[0] + "," + re.search(r'[0-9]\.[0-9][0-9]',string).group()
+	if any(x in string for x in ["Accepted","Rejected","Wait","Interview","Other"]):
+		if "GPA" in string:
+			return [string.split(" ")[0], re.search(r'[0-9]\.[0-9][0-9]',string).group()]
+		else:
+			return [string.split(" ")[0], 0]
 	else:
-		return string.split(" ")[0] + ",0"
+		return string
 
 def format_data():
-	global results_holder
-	global final_result
+	global results
+
+	results = [record for record in results if len(record)>0]
 	
-	# Get rid of the quotes
-	results_holder = [map(lambda s:s.strip('\"'), x) for x in results_holder]
-	results_holder = [map(isPhD, x) for x in results_holder]
-	results_holder = [map(resultAndGpa, x) for x in results_holder]
+	results = [map(lambda s:s.strip('\"'), x) for x in results]
+	results = [map(isPhD, x) for x in results]
+	results = [map(resultAndGpa, x) for x in results]
 
-	# print(results_holder)
+	# Want to flatten things like [u'Rejected', u'3.94']
+	for i in range(0,len(results)):
+		results[i] = list(chain(results[i][:2],results[i][2],results[i][3:]))
 
-def write_data():
-	with open("results.csv","a") as csvfile:
-		admission_results_writer = csv.writer(csvfile,delimiter=",",quoting=csv.QUOTE_NONE,quotechar='')
-		for i in results_holder:
+def write_data(major):
+	with open(major+"_results.csv","a") as csvfile:
+		admission_results_writer = csv.writer(csvfile,delimiter=",")
+		for i in results:
 			admission_results_writer.writerow(i)
 
 if __name__=='__main__':
 	major_list = raw_input("Enter Majors, separated by comma:")
 	for major in major_list.split(","):
-		for page_num in range(1,3):
+		for page_num in range(1,2):
 			scrape_data(major,str(page_num))
-	format_data()
-	write_data()
+		format_data()
+		write_data(major)
+		results = []
