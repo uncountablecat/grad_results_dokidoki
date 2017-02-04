@@ -1,11 +1,14 @@
+import re
 import requests
 import unicodecsv as csv
+
 from bs4 import BeautifulSoup
-import re
 from itertools import chain
+from datetime import datetime
 
 temp = []
 results = []
+marker = datetime.strptime('1 Jan 2017', '%d %b %Y') # Set this time accordingly
 
 def scrape_data(major,page_num):
 	global temp
@@ -30,6 +33,7 @@ def scrape_data(major,page_num):
 			results.append(temp[:-1])
 		temp = []
 
+		
 def isPhD(string):
 	if any(x in string for x in ["phd","Phd","PhD"]):
 		return "PhD"
@@ -38,8 +42,9 @@ def isPhD(string):
 	else:
 		return string
 	# Don't forget the else branch
-	# If you simply write else: pass, isPhD will return None
+	# If you simply write else: pass, isPhD() will return None
 
+	
 def resultAndGpa(string):
 	if any(x in string for x in ["Accepted","Rejected","Wait","Interview","Other"]):
 		if "GPA" in string:
@@ -48,12 +53,39 @@ def resultAndGpa(string):
 			return [string.split(" ")[0], 0]
 	else:
 		return string
+	
 
+def containAppliedSchool(string):
+	'''
+	You will have to modify this function
+	according to what schools you have applied to
+	'''
+	if any(x in string for x in ["UNC","Washington"]):
+		return True
+	else:
+		return False
+	
+
+def formatSchoolName(string):
+	'''
+	You will have to modify this function
+	according to what schools you have applied to
+	'''
+	if any(x in string for x in ["UNC","Chapel","Chapel Hill"]):
+		return "UNC"
+	elif any(x in string for x in ["Washington Seattle","Washington"]):
+		return "Washington"
+	else:
+		return string
+
+	
 def format_data():
 	global results
 
 	results = [record for record in results if len(record)>0]
 	
+	results = [record for record in results if containAppliedSchool(record[0])==True]
+	results = [[formatSchoolName(record[0])] + record[1:] for record in results]
 	results = [map(lambda s:s.strip('\"'), x) for x in results]
 	results = [map(isPhD, x) for x in results]
 	results = [map(resultAndGpa, x) for x in results]
@@ -62,17 +94,23 @@ def format_data():
 	for i in range(0,len(results)):
 		results[i] = list(chain(results[i][:2],results[i][2],results[i][3:]))
 
+		
 def write_data(major):
 	with open(major+"_results.csv","a") as csvfile:
 		admission_results_writer = csv.writer(csvfile,delimiter=",")
 		for i in results:
-			admission_results_writer.writerow(i)
+			if datetime.strptime(i[-1],'%d %b %Y') > marker:
+				admission_results_writer.writerow(i)
+			else:
+				pass
 
 if __name__=='__main__':
-	major_list = raw_input("Enter Majors, separated by comma:")
-	for major in major_list.split(","):
-		for page_num in range(1,2):
-			scrape_data(major,str(page_num))
-		format_data()
-		write_data(major)
-		results = []
+	for page_num in range(1,15): # You may need to modify this range
+		print("Fetching data, page " + str(page_num))
+		scrape_data("Statistics",str(page_num))
+
+	print("Formatting data...")
+	format_data()
+	
+	print("Writing data to csv...")
+	write_data("Statistics")
